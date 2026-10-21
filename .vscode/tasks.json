@@ -2,6 +2,19 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Compile application icon",
+            "type": "shell",
+            "command": "C:/MinGW/bin/windres.exe",
+            "args": [
+                "--input",
+                "${workspaceFolder}/adn-viewer.rc",
+                "--output",
+                "${workspaceFolder}/adn-viewer.res.o",
+                "--output-format",
+                "coff"
+            ]
+        },
+        {
             "label": "Build adn-viewer",
             "type": "shell",
             "command": "C:/MinGW/bin/g++.exe",
@@ -11,6 +24,7 @@
                 "-Wextra",
                 "-pedantic",
                 "${workspaceFolder}/main.cpp",
+                "${workspaceFolder}/adn-viewer.res.o",
                 "-o",
                 "${workspaceFolder}/adn-viewer.exe",
                 "-mwindows",
@@ -24,6 +38,8 @@
                     "PATH": "C:\\MinGW\\bin;${env:PATH}"
                 }
             },
+            "dependsOn": "Compile application icon",
+            "dependsOrder": "sequence",
             "group": {
                 "kind": "build",
                 "isDefault": true

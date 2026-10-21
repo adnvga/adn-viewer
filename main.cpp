@@ -12,6 +12,7 @@
 namespace
 {
 	constexpr wchar_t windowClassName[] = L"AdnViewerWindow";
+	constexpr int applicationIconResourceId = 1;
 
 	struct ImageEntry
 	{
@@ -291,6 +292,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
 	windowClass.lpszClassName = windowClassName;
 	windowClass.lpfnWndProc = windowProcedure;
 	windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
+	windowClass.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(applicationIconResourceId));
 	if (!RegisterClassW(&windowClass))
 	{
 		image.reset();
