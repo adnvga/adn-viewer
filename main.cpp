@@ -91,14 +91,68 @@ namespace
 		}
 	}
 
+	void deleteCurrentImage(HWND window)
+	{
+		if (images.empty())
+		{
+			return;
+		}
+
+		const std::wstring imagePath = images[currentImageIndex].path;
+		std::vector<wchar_t> recycleBinPath(imagePath.begin(), imagePath.end());
+		recycleBinPath.push_back(L'\0');
+		recycleBinPath.push_back(L'\0');
+		image.reset();
+
+		SHFILEOPSTRUCTW deleteOperation = {};
+		deleteOperation.wFunc = FO_DELETE;
+		deleteOperation.pFrom = recycleBinPath.data();
+		deleteOperation.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION;
+		if (SHFileOperationW(&deleteOperation) != 0 || deleteOperation.fAnyOperationsAborted)
+		{
+			loadImage(currentImageIndex);
+			return;
+		}
+
+		images.erase(images.begin() + currentImageIndex);
+		if (images.empty())
+		{
+			currentImageIndex = 0;
+			InvalidateRect(window, nullptr, FALSE);
+			return;
+		}
+
+		if (currentImageIndex == images.size())
+		{
+			currentImageIndex = 0;
+		}
+		if (loadImage(currentImageIndex))
+		{
+			InvalidateRect(window, nullptr, FALSE);
+		}
+	}
+
 	void drawImage(HDC deviceContext, const RECT& clientArea)
 	{
 		const int clientWidth = clientArea.right - clientArea.left;
 		const int clientHeight = clientArea.bottom - clientArea.top;
 		FillRect(deviceContext, &clientArea, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
 
-		if (!image || clientWidth <= 0 || clientHeight <= 0)
+		if (clientWidth <= 0 || clientHeight <= 0)
 		{
+			return;
+		}
+		if (!image)
+		{
+			Gdiplus::Graphics graphics(deviceContext);
+			Gdiplus::FontFamily fontFamily(L"Segoe UI");
+			Gdiplus::Font font(&fontFamily, 24.0f, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+			Gdiplus::SolidBrush textBrush(Gdiplus::Color::White);
+			Gdiplus::StringFormat textFormat;
+			textFormat.SetAlignment(Gdiplus::StringAlignmentCenter);
+			textFormat.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+			const Gdiplus::RectF textArea(0.0f, 0.0f, static_cast<Gdiplus::REAL>(clientWidth), static_cast<Gdiplus::REAL>(clientHeight));
+			graphics.DrawString(L"No image found", -1, &font, textArea, &textFormat, &textBrush);
 			return;
 		}
 
@@ -143,6 +197,11 @@ namespace
 			if (wParam == VK_RIGHT)
 			{
 				showAdjacentImage(window, 1);
+				return 0;
+			}
+			if (wParam == VK_DELETE)
+			{
+				deleteCurrentImage(window);
 				return 0;
 			}
 			break;
