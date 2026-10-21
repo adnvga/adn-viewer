@@ -12,8 +12,18 @@
                 "-pedantic",
                 "${workspaceFolder}/main.cpp",
                 "-o",
-                "${workspaceFolder}/adn-viewer.exe"
+                "${workspaceFolder}/adn-viewer.exe",
+                "-mwindows",
+                "-static",
+                "-static-libgcc",
+                "-static-libstdc++",
+                "-lgdiplus"
             ],
+            "options": {
+                "env": {
+                    "PATH": "C:\\MinGW\\bin;${env:PATH}"
+                }
+            },
             "group": {
                 "kind": "build",
                 "isDefault": true
