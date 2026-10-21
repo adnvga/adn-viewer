@@ -6,12 +6,90 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace
 {
 	constexpr wchar_t windowClassName[] = L"AdnViewerWindow";
 
+	struct ImageEntry
+	{
+		std::wstring path;
+		FILETIME lastWriteTime;
+	};
+
 	std::unique_ptr<Gdiplus::Image> image;
+	std::vector<ImageEntry> images;
+	std::size_t currentImageIndex = 0;
+
+	std::vector<ImageEntry> findImages(const std::wstring& selectedImagePath)
+	{
+		const std::wstring::size_type separator = selectedImagePath.find_last_of(L"\\/");
+		if (separator == std::wstring::npos)
+		{
+			return {};
+		}
+
+		const std::wstring directory = selectedImagePath.substr(0, separator);
+		const std::wstring searchPattern = directory + L"\\*.png";
+		WIN32_FIND_DATAW findData = {};
+		HANDLE findHandle = FindFirstFileW(searchPattern.c_str(), &findData);
+		if (findHandle == INVALID_HANDLE_VALUE)
+		{
+			return {};
+		}
+
+		std::vector<ImageEntry> foundImages;
+		do
+		{
+			if ((findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+			{
+				foundImages.push_back({directory + L"\\" + findData.cFileName, findData.ftLastWriteTime});
+			}
+		} while (FindNextFileW(findHandle, &findData));
+		FindClose(findHandle);
+
+		std::sort(foundImages.begin(), foundImages.end(), [](const ImageEntry& left, const ImageEntry& right)
+		{
+			const int timeComparison = CompareFileTime(&left.lastWriteTime, &right.lastWriteTime);
+			if (timeComparison != 0)
+			{
+				return timeComparison > 0;
+			}
+
+			return lstrcmpiW(left.path.c_str(), right.path.c_str()) < 0;
+		});
+		return foundImages;
+	}
+
+	bool loadImage(std::size_t index)
+	{
+		std::unique_ptr<Gdiplus::Image> nextImage = std::make_unique<Gdiplus::Image>(images[index].path.c_str());
+		if (nextImage->GetLastStatus() != Gdiplus::Ok)
+		{
+			return false;
+		}
+
+		image = std::move(nextImage);
+		currentImageIndex = index;
+		return true;
+	}
+
+	void showAdjacentImage(HWND window, int direction)
+	{
+		if ((direction < 0 && currentImageIndex == 0) ||
+			(direction > 0 && currentImageIndex + 1 >= images.size()))
+		{
+			return;
+		}
+
+		const std::size_t nextImageIndex = direction < 0 ? currentImageIndex - 1 : currentImageIndex + 1;
+		if (loadImage(nextImageIndex))
+		{
+			InvalidateRect(window, nullptr, FALSE);
+		}
+	}
 
 	void drawImage(HDC deviceContext, const RECT& clientArea)
 	{
@@ -57,6 +135,16 @@ namespace
 				DestroyWindow(window);
 				return 0;
 			}
+			if (wParam == VK_LEFT)
+			{
+				showAdjacentImage(window, -1);
+				return 0;
+			}
+			if (wParam == VK_RIGHT)
+			{
+				showAdjacentImage(window, 1);
+				return 0;
+			}
 			break;
 
 		case WM_PAINT:
@@ -65,7 +153,16 @@ namespace
 			HDC deviceContext = BeginPaint(window, &paint);
 			RECT clientArea = {};
 			GetClientRect(window, &clientArea);
-			drawImage(deviceContext, clientArea);
+			const int clientWidth = clientArea.right - clientArea.left;
+			const int clientHeight = clientArea.bottom - clientArea.top;
+			HDC bufferContext = CreateCompatibleDC(deviceContext);
+			HBITMAP bufferBitmap = CreateCompatibleBitmap(deviceContext, clientWidth, clientHeight);
+			HGDIOBJ previousBitmap = SelectObject(bufferContext, bufferBitmap);
+			drawImage(bufferContext, clientArea);
+			BitBlt(deviceContext, 0, 0, clientWidth, clientHeight, bufferContext, 0, 0, SRCCOPY);
+			SelectObject(bufferContext, previousBitmap);
+			DeleteObject(bufferBitmap);
+			DeleteDC(bufferContext);
 			EndPaint(window, &paint);
 			return 0;
 		}
@@ -103,8 +200,26 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
 
 	const std::wstring imagePath = arguments[1];
 	LocalFree(arguments);
-	image = std::make_unique<Gdiplus::Image>(imagePath.c_str());
-	if (image->GetLastStatus() != Gdiplus::Ok)
+	const std::wstring::size_type imageNameSeparator = imagePath.find_last_of(L"\\/");
+	if (imageNameSeparator == std::wstring::npos)
+	{
+		MessageBoxW(nullptr, L"No se pudo identificar la imagen seleccionada.", L"ADN Viewer", MB_OK | MB_ICONERROR);
+		Gdiplus::GdiplusShutdown(gdiplusToken);
+		return 1;
+	}
+
+	const std::wstring selectedImageName = imagePath.substr(imageNameSeparator + 1);
+	images = findImages(imagePath);
+	const std::vector<ImageEntry>::const_iterator selectedImage = std::find_if(
+		images.cbegin(),
+		images.cend(),
+		[&selectedImageName](const ImageEntry& candidate)
+		{
+			const std::wstring::size_type candidateNameSeparator = candidate.path.find_last_of(L"\\/");
+			return candidateNameSeparator != std::wstring::npos &&
+				lstrcmpiW(candidate.path.c_str() + candidateNameSeparator + 1, selectedImageName.c_str()) == 0;
+		});
+	if (selectedImage == images.cend() || !loadImage(static_cast<std::size_t>(selectedImage - images.cbegin())))
 	{
 		MessageBoxW(nullptr, L"No se pudo cargar la imagen seleccionada.", L"ADN Viewer", MB_OK | MB_ICONERROR);
 		image.reset();
