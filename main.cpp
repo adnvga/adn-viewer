@@ -1,5 +1,6 @@
 #define NOMINMAX
 #include <windows.h>
+#include <shellapi.h>
 #include <gdiplus.h>
 
 #include <algorithm>
@@ -9,23 +10,8 @@
 namespace
 {
 	constexpr wchar_t windowClassName[] = L"AdnViewerWindow";
-	constexpr wchar_t imageFileName[] = L"00028-1577718336.png";
 
 	std::unique_ptr<Gdiplus::Image> image;
-
-	std::wstring executableDirectory()
-	{
-		wchar_t executablePath[MAX_PATH] = {};
-		const DWORD pathLength = GetModuleFileNameW(nullptr, executablePath, MAX_PATH);
-		if (pathLength == 0 || pathLength == MAX_PATH)
-		{
-			return L"";
-		}
-
-		std::wstring path(executablePath, pathLength);
-		const std::wstring::size_type separator = path.find_last_of(L"\\/");
-		return separator == std::wstring::npos ? L"" : path.substr(0, separator);
-	}
 
 	void drawImage(HDC deviceContext, const RECT& clientArea)
 	{
@@ -102,11 +88,25 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
 		return 1;
 	}
 
-	const std::wstring imagePath = executableDirectory() + L"\\" + imageFileName;
+	int argumentCount = 0;
+	LPWSTR* arguments = CommandLineToArgvW(GetCommandLineW(), &argumentCount);
+	if (!arguments || argumentCount < 2)
+	{
+		MessageBoxW(nullptr, L"No se recibio una imagen para mostrar.", L"ADN Viewer", MB_OK | MB_ICONERROR);
+		if (arguments)
+		{
+			LocalFree(arguments);
+		}
+		Gdiplus::GdiplusShutdown(gdiplusToken);
+		return 1;
+	}
+
+	const std::wstring imagePath = arguments[1];
+	LocalFree(arguments);
 	image = std::make_unique<Gdiplus::Image>(imagePath.c_str());
 	if (image->GetLastStatus() != Gdiplus::Ok)
 	{
-		MessageBoxW(nullptr, L"No se pudo cargar la imagen de referencia.", L"ADN Viewer", MB_OK | MB_ICONERROR);
+		MessageBoxW(nullptr, L"No se pudo cargar la imagen seleccionada.", L"ADN Viewer", MB_OK | MB_ICONERROR);
 		image.reset();
 		Gdiplus::GdiplusShutdown(gdiplusToken);
 		return 1;
