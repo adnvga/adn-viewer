@@ -1,0 +1,5 @@
+{
+    "git.ignoreLimitWarning": true,
+    "cmake.sourceDirectory": "/Users/adan/Documents/GitHub/adn-viewer/_qt/qt-everywhere-src-6.12.0",
+    "cmake.autoDetectSourceDirectory": false
+}
